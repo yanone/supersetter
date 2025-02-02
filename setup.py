@@ -3,6 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="supersetter",
     version="0.1.0",
+    package_dir={"": "Lib"},
     packages=find_packages(),
     install_requires=[
         # Add your dependencies here
