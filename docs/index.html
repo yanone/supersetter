@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File MD5 Checksum</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <link rel="stylesheet" href="/static/index.css">
+    <style>
+        #drop-area {
+            width: 400px;
+            height: 400px;
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            text-align: center;
+            line-height: 400px;
+            font-size: 16px;
+            color: #999;
+            margin: 20px auto;
+        }
+    </style>
+
+    <script>
+
+        var font_json = {};
+        var md5 = "";
+
+        var settings = {
+            "languages": ["ar_Arab"],
+        }
+
+        function provide_font() {
+
+            // Print languages
+            var i = 0;
+            for (var script in font_json["supported_languages"]) {
+                script_id = script.toLowerCase().replace(" ", "_");
+
+                $("#languages").append("<h1>" + font_json["supported_languages"][script]["name"] + "</h1>");
+
+                // sort by regions
+                regions = {};
+                for (var language_index in font_json["supported_languages"][script]["supported_languages"]) {
+                    language = font_json["supported_languages"][script]["supported_languages"][language_index];
+                    language_code = language[0];
+                    language_name = language[1];
+                    language_regions = language[2];
+                    for (var region_index in language_regions) {
+                        region = language_regions[region_index];
+                        if (!(region in regions)) {
+                            regions[region] = [];
+                        }
+                        regions[region].push(Array(language_code, language_name));
+                    }
+                }
+
+                for (var region in regions) {
+                    languages = regions[region];
+
+                    html = "";
+                    html += "<p><b>" + region + "</b><br />";
+
+                    language_codes = [];
+                    for (var language_index in languages) {
+                        language_code = languages[language_index][0];
+                        language_codes.push(language_code);
+                    }
+
+                    html += "<input type='checkbox' class='region' languages='" + language_codes.join(",") + "' id='region_" + i + "' onclick='toggle_region(\"region_" + i + "\")'>";
+                    html += "<label for='region_" + i + "'>Select All</label></p>";
+                    i++;
+
+                    html += "<div id='' style='column-count: 8; column-gap: 20px;'>";
+
+                    for (var language_index in languages) {
+                        language_code = languages[language_index][0];
+                        language_name = languages[language_index][1];
+
+                        html += "<div><input type='checkbox' class='language' language='" + language_code + "' id='lang_" + i + "' onclick='toggle_language(\"lang_" + i + "\")'>";
+                        html += "<label for='lang_" + i + "'>" + language_name + "</label></div>";
+                        i++;
+                    }
+
+                    html += "</div>"
+                    $("#languages").append(html);
+                }
+            }
+
+            $("#font").append("<p></p><button onclick='subset_font()'>Subset Font</button>");
+
+            apply_settings();
+        }
+
+        function subset_font() {
+            $("#message").text("Font subsetting started...");
+            $.ajax({
+                url: '/subset',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ md5sum: md5, settings: settings }),
+                success: function (response) {
+                    if (response["status"] == "success") {
+                        $("#message").text("");
+                        window.open("/download?id=" + response["id"]);
+                    } else {
+                        $("#message").text(response["message"]);
+                    }
+                },
+                error: function (error) {
+                    $("#message").text("<br>Error: " + JSON.stringify(error));
+                }
+            });
+        }
+
+        function apply_settings() {
+
+            $(".language").prop("checked", false);
+            for (var language_index in settings["languages"]) {
+                language_code = settings["languages"][language_index];
+                $(".language[language='" + language_code + "']").prop("checked", true);
+            }
+        }
+
+        function set_language(language_code) {
+            if (!settings["languages"].includes(language_code)) {
+                settings["languages"].push(language_code);
+            }
+            apply_settings();
+        }
+
+        function unset_language(language_code) {
+            if (settings["languages"].indexOf(language_code) > -1) {
+                settings["languages"].splice(settings["languages"].indexOf(language_code), 1);
+            }
+            apply_settings();
+        }
+
+        function toggle_language(id) {
+            language_code = $("#" + id).attr("language");
+            if ($("#" + id).is(":checked")) {
+                set_language(language_code);
+            } else {
+                unset_language(language_code);
+            }
+
+            set_region_toggles();
+        }
+
+        function set_region_toggles() {
+            // Make sure each region's toggle is set or unset
+            $(".region").each(function (index, element) {
+                language_codes = $(element).attr("languages").split(",");
+
+                language_codes_per_region = [];
+                language_codes.forEach(language_code => {
+                    if ($(".language[language='" + language_code + "']").prop("checked")) {
+                        language_codes_per_region.push("checked");
+                    }
+                    else {
+                        language_codes_per_region.push("unchecked");
+                    }
+                });
+
+                if (language_codes_per_region.every(function (val) { return val === "checked"; })) {
+                    $(element).prop("checked", true);
+                } else {
+                    $(element).prop("checked", false);
+                }
+            });
+        }
+
+        function toggle_region(id) {
+            language_codes = $("#" + id).attr("languages");
+            language_codes = language_codes.split(",");
+            language_codes.forEach(element => {
+                if ($("#" + id).is(":checked")) {
+                    set_language(element);
+                } else {
+                    unset_language(element);
+                }
+            });
+            set_region_toggles();
+        }
+
+        $(document).ready(function () {
+            $(".tabs").tabs({
+
+            });
+        });
+    </script>
+</head>
+
+<body>
+    <div id="drop-area">Drag and drop SukoonVAR.ttf here</div>
+    <div id="result"></div>
+    <div id="font">
+        <div class="tabs">
+            <ul>
+                <li><a href="#languages">Languages</a></li>
+                <li><a href="#features">Features</a></li>
+            </ul>
+            <div id="languages">
+                <p>Note: For every script, languages may appear in more than one region. Therefore, be mindful that
+                    unselecting a
+                    language in one region will unselect all occurences of that language within the script.<br />
+                    Example: Unselecting French in Africa will also unselect French in Europe.</p>
+            </div>
+            <div id="features"></div>
+        </div>
+    </div>
+    <div id="message"></div>
+
+    <script>
+        $(document).ready(function () {
+            $("#drop-area").on("dragover", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                $(this).css("border-color", "#000");
+            });
+
+            $("#drop-area").on("dragleave", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                $(this).css("border-color", "#ccc");
+            });
+
+            $("#drop-area").on("drop", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                $(this).css("border-color", "#ccc");
+
+                var files = event.originalEvent.dataTransfer.files;
+                if (files.length > 0) {
+                    var file = files[0];
+                    var reader = new FileReader();
+                    reader.onload = function (e) {
+                        var fileContent = e.target.result;
+                        md5 = CryptoJS.MD5(CryptoJS.enc.Latin1.parse(fileContent)).toString();
+                        $("#result").text("MD5 Checksum: " + md5);
+
+                        // Send the MD5 checksum to the Flask server
+                        $.ajax({
+                            url: '/checksum',
+                            type: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify({ md5sum: md5 }),
+                            success: function (response) {
+                                if (response["status"] == "success") {
+                                    $("#drop-area").hide();
+                                    $("#result").hide();
+                                    $("#font").show();
+                                    font_json = response["data"];
+                                    provide_font();
+                                } else {
+                                    $("#result").text(response["message"]);
+                                }
+                            },
+                            error: function (error) {
+                                $("#result").text("<br>Error: " + JSON.stringify(error));
+                            }
+                        });
+                    };
+                    reader.readAsBinaryString(file);
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
